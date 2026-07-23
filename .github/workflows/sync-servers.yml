@@ -1,0 +1,25 @@
+name: sync-servers
+
+# Split out of sstp_shield_server (private) into its own public repo: GitHub
+# Free gives an org only 2,000 Actions minutes/month for PRIVATE repos, and a
+# 10-minute cron alone burns close to that; public repos get unlimited minutes.
+# This repo has no source of its own — it only pings the deployed backend's
+# sync endpoint. Set repo secrets VERCEL_URL and SYNC_SECRET (must match the
+# backend's env) in this repo's settings.
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # GitHub's minimum granularity; may lag under load
+  workflow_dispatch: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger server sync
+        env:
+          URL: ${{ secrets.VERCEL_URL }}
+          SECRET: ${{ secrets.SYNC_SECRET }}
+        run: |
+          curl -fsS -X POST "$URL/api/internal/sync-servers" \
+            -H "X-Sync-Secret: $SECRET" \
+            --max-time 60
