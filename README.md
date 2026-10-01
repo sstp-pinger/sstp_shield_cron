@@ -27,3 +27,7 @@ Repo secrets (Settings → Secrets and variables → Actions):
 
 Nothing else to configure. `workflow_dispatch` is enabled too, for a manual
 trigger from the Actions tab or `gh workflow run sync-servers.yml`.
+
+
+## TODO 
+- Github actions cron job is stops if there is no any activity
