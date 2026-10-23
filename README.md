@@ -28,6 +28,14 @@ Repo secrets (Settings → Secrets and variables → Actions):
 Nothing else to configure. `workflow_dispatch` is enabled too, for a manual
 trigger from the Actions tab or `gh workflow run sync-servers.yml`.
 
+## Staying active
 
-## TODO 
-- Github actions cron job is stops if there is no any activity
+GitHub disables a public repo's scheduled workflows after 60 days without any
+activity in the repo, and nothing else ever changes this one. So the workflow
+keeps it active itself: its `keepalive` job writes `last-run.txt` and commits
+it once a day, on the first run of each UTC day, whether or not the sync
+succeeded. Once a day rather than on every 10-minute run, so the history stays
+readable.
+
+If the schedule was disabled anyway, re-enable it from the Actions tab or
+with `gh workflow enable sync-servers.yml`.

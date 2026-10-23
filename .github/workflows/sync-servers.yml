@@ -11,6 +11,10 @@ on:
     - cron: "*/10 * * * *"   # GitHub's minimum granularity; may lag under load
   workflow_dispatch: {}
 
+# Only the keepalive job writes (to last-run.txt).
+permissions:
+  contents: write
+
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -23,3 +27,47 @@ jobs:
           curl -fsS -X POST "$URL/api/internal/sync-servers" \
             -H "X-Sync-Secret: $SECRET" \
             --max-time 60
+
+  # GitHub disables a public repo's scheduled workflows after 60 days with no
+  # activity in the repo, and nothing else ever changes this one. So the
+  # workflow keeps it active itself: last-run.txt records the last run, and is
+  # committed once per day (the first run of each UTC day) rather than every
+  # 10 minutes, which would bury the history under ~4,000 commits a month.
+  #
+  # Runs whether or not the sync succeeded: a backend outage must not let the
+  # schedule die too.
+  keepalive:
+    needs: sync
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record this run, and commit once a day
+        env:
+          RESULT: ${{ needs.sync.result }}
+        run: |
+          set -euo pipefail
+          today=$(date -u +%Y-%m-%d)
+          if [ -f last-run.txt ] && grep -q "^date: $today$" last-run.txt; then
+            echo "Already recorded today ($today); nothing to commit."
+            exit 0
+          fi
+          cat > last-run.txt <<EOF
+          # Written by .github/workflows/sync-servers.yml to keep this repo
+          # active, so GitHub does not disable its schedule. Do not edit.
+          date: $today
+          last run: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          last sync: $RESULT
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add last-run.txt
+          git commit -m "Keepalive: last run $today"
+          # Two runs can overlap when GitHub is busy. If the other one already
+          # recorded today, its commit is enough.
+          if ! git pull --rebase origin "$GITHUB_REF_NAME"; then
+            git rebase --abort
+            echo "Another run recorded today first; nothing to push."
+            exit 0
+          fi
+          git push origin "HEAD:$GITHUB_REF_NAME"
